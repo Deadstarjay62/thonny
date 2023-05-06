@@ -69,7 +69,7 @@ class MicrobitConfigPage(BareMetalMicroPythonConfigPage):
         return [""]
 
     def _open_flashing_dialog(self, kind: str) -> None:
-        assert kind == ""
+        assert not kind
         dlg = MicrobitFlashingDialog(self, "MicroPython")
         ui_utils.show_dialog(dlg)
 

@@ -114,10 +114,7 @@ class WorkDialog(CommonDialog):
         if self.has_action_menu():
             self._menu_button.grid(column=3, row=1, pady=padding, padx=(0, intpad))
 
-        if running_on_mac_os():
-            menu_conf = {}
-        else:
-            menu_conf = get_style_configuration("Menu")
+        menu_conf = {} if running_on_mac_os() else get_style_configuration("Menu")
         self._action_menu = tk.Menu(self, tearoff=False, **menu_conf)
 
         self._ok_button = ttk.Button(
@@ -191,14 +188,10 @@ class WorkDialog(CommonDialog):
             if self._state == "closed":
                 return
 
-        if self._state == "idle":
-            if self.is_ready_for_work():
-                self._ok_button.configure(state="normal")
-            else:
-                self._ok_button.configure(state="disabled")
+        if self._state == "idle" and self.is_ready_for_work():
+            self._ok_button.configure(state="normal")
         else:
             self._ok_button.configure(state="disabled")
-
         if self._state == "done":
             set_text_if_different(self._cancel_button, tr("Close"))
         else:
@@ -320,7 +313,7 @@ class WorkDialog(CommonDialog):
         if not text:
             return
         if len(text) > self.get_action_text_max_length():
-            text = text[: self.get_action_text_max_length() - 3] + "..."
+            text = f"{text[:self.get_action_text_max_length() - 3]}..."
         self.set_action_text(text)
 
     def report_done(self, success):
@@ -456,7 +449,7 @@ class SubprocessDialog(WorkDialog):
 
     def _check_set_action_text_from_output_line(self, line):
         if len(line) > self.get_action_text_max_length():
-            line = line[: self.get_action_text_max_length() - 3].strip() + "..."
+            line = f"{line[:self.get_action_text_max_length() - 3].strip()}..."
         if line:
             self.set_action_text(line.strip())
 
@@ -476,5 +469,7 @@ class SubprocessDialog(WorkDialog):
                     # now let's be more concrete
                     self._proc.kill()
         except OSError as e:
-            messagebox.showerror("Error", "Could not kill subprocess: " + str(e), master=self)
+            messagebox.showerror(
+                "Error", f"Could not kill subprocess: {str(e)}", master=self
+            )
             logger.error("Could not kill subprocess", exc_info=e)

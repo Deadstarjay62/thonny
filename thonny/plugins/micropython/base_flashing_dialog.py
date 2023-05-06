@@ -102,7 +102,7 @@ class BaseFlashingDialog(WorkDialog, ABC):
         )
         self._family_combo.bind("<<ComboboxSelected>>", self.register_settings_changed, True)
 
-        variant_label = ttk.Label(self.main_frame, text=f"variant")
+        variant_label = ttk.Label(self.main_frame, text="variant")
         variant_label.grid(row=6, column=1, sticky="e", padx=(epadx, 0), pady=(ipady, 0))
         self._variant_combo = MappingCombobox(
             self.main_frame, exportselection=False, state="disabled"
@@ -168,10 +168,15 @@ class BaseFlashingDialog(WorkDialog, ABC):
                     # not handled yet if still downloading
                     self._last_handled_family = current_family
 
-            if self._last_handled_family_target != (current_family, current_target):
-                if current_family and current_target and self._downloaded_variants:
-                    self._try_preselect_a_variant(current_target)
-                    self._last_handled_family_target = (current_family, current_target)
+            if (
+                self._last_handled_family_target
+                != (current_family, current_target)
+                and current_family
+                and current_target
+                and self._downloaded_variants
+            ):
+                self._try_preselect_a_variant(current_target)
+                self._last_handled_family_target = (current_family, current_target)
 
             current_variant = self._variant_combo.get_selected_value()
             if current_variant != self._last_handled_variant:
@@ -258,12 +263,12 @@ class BaseFlashingDialog(WorkDialog, ABC):
             for variant in populars.values():
                 popular_variant = variant.copy()
                 # need different title to distinguish it from the same item in ALL VARIANTS
-                popular_title = self._create_variant_description(variant) + " "
+                popular_title = f"{self._create_variant_description(variant)} "
                 popular_variant["title"] = popular_title
                 enhanced_mapping[popular_title] = popular_variant
 
             enhanced_mapping["--- ALL VARIANTS " + "-" * 100] = {}
-            enhanced_mapping.update(filtered_mapping)
+            enhanced_mapping |= filtered_mapping
         else:
             enhanced_mapping = filtered_mapping
 
@@ -284,7 +289,7 @@ class BaseFlashingDialog(WorkDialog, ABC):
     def _present_versions_for_variant(self, variant: Dict[str, Any]) -> None:
         versions_mapping = {d["version"]: d for d in variant["downloads"]}
         self._version_combo.set_mapping(versions_mapping)
-        if len(versions_mapping) > 0:
+        if versions_mapping:
             self._version_combo.select_value(list(versions_mapping.values())[0])
         else:
             self._version_combo.select_none()
@@ -348,8 +353,7 @@ class BaseFlashingDialog(WorkDialog, ABC):
         latest_prerelease_substitute = None
         latest_prerelease_regex: Optional[str] = None
         for variant in variants:
-            new_regex = variant.get("latest_prerelease_regex", None)
-            if new_regex:
+            if new_regex := variant.get("latest_prerelease_regex", None):
                 latest_prerelease_regex = new_regex
                 import json
                 import urllib.request
@@ -368,9 +372,8 @@ class BaseFlashingDialog(WorkDialog, ABC):
                         html_str = fp.read().decode("UTF-8", errors="replace")
                         # logger.debug("Variants info: %r", json_str)
 
-                    match = re.search(latest_prerelease_regex, html_str)
-                    if match:
-                        latest_prerelease_substitute = match.group(0)
+                    if match := re.search(latest_prerelease_regex, html_str):
+                        latest_prerelease_substitute = match[0]
                         logger.info(
                             "Using %r as prerelease substitute", latest_prerelease_substitute
                         )
@@ -385,7 +388,7 @@ class BaseFlashingDialog(WorkDialog, ABC):
 
             if latest_prerelease_substitute:
                 assert latest_prerelease_regex
-                for i, download in enumerate(variant["downloads"]):
+                for download in variant["downloads"]:
                     patched_url = re.sub(
                         latest_prerelease_regex, latest_prerelease_substitute, download["url"]
                     )
@@ -433,11 +436,7 @@ class BaseFlashingDialog(WorkDialog, ABC):
     ) -> None:
         temp_file = None
         try:
-            if download_info:
-                temp_file = self._download_to_temp(download_info)
-            else:
-                temp_file = None
-
+            temp_file = self._download_to_temp(download_info) if download_info else None
             core_result = self.perform_core_operation(
                 temp_file, variant_info, download_info, target_info, work_options
             )
@@ -515,7 +514,7 @@ class BaseFlashingDialog(WorkDialog, ABC):
                     bytes_copied += len(block)
                     percent_done = bytes_copied / size * 100
                     percent_str = "%.0f%%" % (percent_done)
-                    self.set_action_text("Downloading... " + percent_str)
+                    self.set_action_text(f"Downloading... {percent_str}")
 
                     # leaving left half of the progressbar for downloading
                     self.report_progress(percent_done, 200)
@@ -540,12 +539,11 @@ class BaseFlashingDialog(WorkDialog, ABC):
 
 
 def find_uf2_property(lines: List[str], prop_name: str) -> Optional[str]:
-    marker = prop_name + ": "
-    for line in lines:
-        if line.startswith(marker):
-            return line[len(marker) :]
-
-    return None
+    marker = f"{prop_name}: "
+    return next(
+        (line[len(marker) :] for line in lines if line.startswith(marker)),
+        None,
+    )
 
 
 def family_code_to_name(code: str) -> str:

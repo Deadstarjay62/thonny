@@ -56,7 +56,7 @@ mcu_list = "RP2040, esp8266, esp32, esp32s2, esp32s3, esp32c3, rp2040, samd21, s
 for mcu in map(str.strip, mcu_list.split(",")):
     print("Fetching mcu", mcu, end="... ")
     parser = IndexParser()
-    parser.feed(read_page(base_url + "?mcu=" + mcu))
+    parser.feed(read_page(f"{base_url}?mcu={mcu}"))
 
     print(f"Adding {len(parser.variants)} boards ..........................................")
     for pvariant in parser.variants:
@@ -98,7 +98,7 @@ for i, variant in enumerate(all_variants):
             variant["info_url"],
             r"v(\d+(?:\.\d+)+)\." + extension,
             1,
-            rf"({UNSTABLE_VERSION})\." + extension,
+            f"({UNSTABLE_VERSION})\.{extension}",
             1,
             url_prefix="https://micropython.org",
         )

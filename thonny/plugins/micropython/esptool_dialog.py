@@ -90,7 +90,7 @@ class ESPFlashingDialog(BaseFlashingDialog):
             f"0x0 ({x0_target_description})": "0x0",
             f"0x1000 ({x1000_target_description})": "0x1000",
         }
-        address_label = ttk.Label(self.main_frame, text=f"Target address")
+        address_label = ttk.Label(self.main_frame, text="Target address")
         address_label.grid(row=9, column=1, sticky="e", padx=(epadx, 0), pady=(epady, 0))
         self._address_combo = MappingCombobox(
             self.main_frame, exportselection=False, mapping=address_mapping
@@ -109,7 +109,7 @@ class ESPFlashingDialog(BaseFlashingDialog):
             "38400 (a fallback to try if installation fails at higher speeds)": "38400",
             "9600 (the last resort for ruling out installation speed problems)": "9600",
         }
-        speed_label = ttk.Label(self.main_frame, text=f"Install speed")
+        speed_label = ttk.Label(self.main_frame, text="Install speed")
         speed_label.grid(row=10, column=1, sticky="e", padx=(epadx, 0), pady=(ipady, 0))
         self._speed_combo = MappingCombobox(
             self.main_frame, exportselection=False, mapping=speed_mapping
@@ -128,7 +128,7 @@ class ESPFlashingDialog(BaseFlashingDialog):
             "dout (a less common option)": "dout",
             "qout (a less common option)": "qout",
         }
-        flash_mode_label = ttk.Label(self.main_frame, text=f"Flash mode")
+        flash_mode_label = ttk.Label(self.main_frame, text="Flash mode")
         flash_mode_label.grid(row=11, column=1, sticky="e", padx=(epadx, 0), pady=(ipady, 0))
         self._flash_mode_combo = MappingCombobox(
             self.main_frame, exportselection=False, mapping=flash_mode_mapping
@@ -330,7 +330,11 @@ class ESPFlashingDialog(BaseFlashingDialog):
         return returncode == 0
 
     def _compute_start_address(self, family: str) -> str:
-        if self.firmware_name == "MicroPython" and family in ["esp32", "esp32-s2", "esp32-s3"]:
+        if self.firmware_name == "MicroPython" and family in {
+            "esp32",
+            "esp32-s2",
+            "esp32-s3",
+        }:
             return "0x1000"
         else:
             return "0x0"
@@ -353,17 +357,16 @@ class ESPFlashingDialog(BaseFlashingDialog):
 
         family = self._infer_firmware_family(path)
         if not family:
-            famkey = ui_utils.ask_one_from_choices(
+            if famkey := ui_utils.ask_one_from_choices(
                 self,
                 title="Problem",
                 question="Could not determine image type.\nPlease select the correct family manually!",
                 choices=self.get_families_mapping().keys(),
-            )
+            ):
+                family = self.get_families_mapping()[famkey]
 
-            if not famkey:
+            else:
                 return
-
-            family = self.get_families_mapping()[famkey]
 
         if family not in self.get_families_mapping().values():
             messagebox.showerror("Error", f"Unkown image type '{family!r}'", parent=self)
@@ -472,7 +475,9 @@ class ESPFlashingDialog(BaseFlashingDialog):
                     # now let's be more concrete
                     self._proc.kill()
         except OSError as e:
-            messagebox.showerror("Error", "Could not kill subprocess: " + str(e), master=self)
+            messagebox.showerror(
+                "Error", f"Could not kill subprocess: {str(e)}", master=self
+            )
             logger.error("Could not kill subprocess", exc_info=e)
 
     def has_action_menu(self) -> bool:

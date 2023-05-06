@@ -94,13 +94,13 @@ class Record:
 
     def __repr__(self):
         keys = self.__dict__.keys()
-        items = ("{}={}".format(k, repr(self.__dict__[k])) for k in keys)
-        return "{}({})".format(self.__class__.__name__, ", ".join(items))
+        items = (f"{k}={repr(self.__dict__[k])}" for k in keys)
+        return f'{self.__class__.__name__}({", ".join(items)})'
 
     def __str__(self):
         keys = sorted(self.__dict__.keys())
-        items = ("{}={}".format(k, repr(self.__dict__[k])) for k in keys)
-        return "{}({})".format(self.__class__.__name__, ", ".join(items))
+        items = (f"{k}={repr(self.__dict__[k])}" for k in keys)
+        return f'{self.__class__.__name__}({", ".join(items)})'
 
     def __eq__(self, other):
         # pylint: disable=unidiomatic-typecheck
@@ -230,7 +230,7 @@ class InlineResponse(MessageFromBackend):
     def __init__(self, command_name: str, **kw) -> None:
         super().__init__(**kw)
         self.command_name = command_name
-        self.event_type = self.command_name + "_response"
+        self.event_type = f"{self.command_name}_response"
 
 
 def serialize_message(msg: Record, max_line_length=65536) -> str:
@@ -240,10 +240,10 @@ def serialize_message(msg: Record, max_line_length=65536) -> str:
     # default (safe) window size in Paramiko (https://github.com/thonny/thonny/issues/1680)
     msg_str = ascii(msg)
 
-    lines = []
-    for i in range(0, len(msg_str), max_line_length):
-        lines.append(msg_str[i : i + max_line_length])
-
+    lines = [
+        msg_str[i : i + max_line_length]
+        for i in range(0, len(msg_str), max_line_length)
+    ]
     return MESSAGE_MARKER + str(len(lines)) + " " + "\n".join(lines)
 
 
@@ -264,43 +264,38 @@ def normpath_with_actual_case(name: str) -> str:
     if not os.path.exists(name):
         return os.path.normpath(name)
 
-    if os.name == "nt":
-        try:
-            # https://stackoverflow.com/questions/2113822/python-getting-filename-case-as-stored-in-windows/2114975
-            norm_name = os.path.normpath(name)
-
-            from ctypes import create_unicode_buffer, windll
-
-            buf = create_unicode_buffer(512)
-            # GetLongPathNameW alone doesn't fix filename part
-            windll.kernel32.GetShortPathNameW(norm_name, buf, 512)  # @UndefinedVariable
-            windll.kernel32.GetLongPathNameW(buf.value, buf, 512)  # @UndefinedVariable
-            result = buf.value
-
-            if result.casefold() != norm_name.casefold():
-                # Sometimes GetShortPathNameW + GetLongPathNameW doesn't work
-                # see eg. https://github.com/thonny/thonny/issues/925
-                windll.kernel32.GetLongPathNameW(norm_name, buf, 512)  # @UndefinedVariable
-                result = buf.value
-
-                if result.casefold() != norm_name.casefold():
-                    result = norm_name
-
-            if result[1] == ":":
-                # ensure drive letter is capital
-                return result[0].upper() + result[1:]
-            else:
-                return result
-        except Exception:
-            logger.warning(
-                "Could not compute normpath_with_actual_case for %r", name, exc_info=True
-            )
-            return os.path.normpath(name)
-    else:
+    if os.name != "nt":
         # easy on Linux
         # too difficult on mac
         # https://stackoverflow.com/questions/14515073/in-python-on-osx-with-hfs-how-can-i-get-the-correct-case-of-an-existing-filenam
         # Hopefully only correct case comes into Thonny (eg. via open dialog)
+        return os.path.normpath(name)
+    try:
+        # https://stackoverflow.com/questions/2113822/python-getting-filename-case-as-stored-in-windows/2114975
+        norm_name = os.path.normpath(name)
+
+        from ctypes import create_unicode_buffer, windll
+
+        buf = create_unicode_buffer(512)
+        # GetLongPathNameW alone doesn't fix filename part
+        windll.kernel32.GetShortPathNameW(norm_name, buf, 512)  # @UndefinedVariable
+        windll.kernel32.GetLongPathNameW(buf.value, buf, 512)  # @UndefinedVariable
+        result = buf.value
+
+        if result.casefold() != norm_name.casefold():
+            # Sometimes GetShortPathNameW + GetLongPathNameW doesn't work
+            # see eg. https://github.com/thonny/thonny/issues/925
+            windll.kernel32.GetLongPathNameW(norm_name, buf, 512)  # @UndefinedVariable
+            result = buf.value
+
+            if result.casefold() != norm_name.casefold():
+                result = norm_name
+
+        return result[0].upper() + result[1:] if result[1] == ":" else result
+    except Exception:
+        logger.warning(
+            "Could not compute normpath_with_actual_case for %r", name, exc_info=True
+        )
         return os.path.normpath(name)
 
 
@@ -327,9 +322,8 @@ def get_exe_dirs():
         if sys.platform == "win32":
             if site.getusersitepackages():
                 result.append(site.getusersitepackages().replace("site-packages", "Scripts"))
-        else:
-            if site.getuserbase():
-                result.append(site.getuserbase() + "/bin")
+        elif site.getuserbase():
+            result.append(f"{site.getuserbase()}/bin")
 
     main_scripts = os.path.join(sys.prefix, "Scripts")
     if os.path.isdir(main_scripts) and main_scripts not in result:
@@ -486,7 +480,7 @@ def get_dirs_children_info(
 
 
 def get_single_dir_child_data(path: str, include_hidden: bool = False) -> Optional[Dict[str, Dict]]:
-    if path == "":
+    if not path:
         if sys.platform == "win32":
             return {**get_windows_volumes_info(), **get_windows_network_locations()}
         else:
@@ -546,9 +540,7 @@ def get_windows_volumes_info():
 
     bitmask = windll.kernel32.GetLogicalDrives()  # @UndefinedVariable
     for letter in string.ascii_uppercase:
-        if not bitmask & 1:
-            pass
-        else:
+        if bitmask & 1:
             drive_type = all_drive_types[
                 windll.kernel32.GetDriveTypeW("%s:\\" % letter)
             ]  # @UndefinedVariable
@@ -563,7 +555,7 @@ def get_windows_volumes_info():
             if drive_type in required_drive_types and (
                 letter != "A" or drive_type != "DRIVE_REMOVABLE"
             ):
-                drive = letter + ":"
+                drive = f"{letter}:"
                 path = drive + "\\"
 
                 try:
@@ -572,7 +564,7 @@ def get_windows_volumes_info():
                     if not volume_name:
                         volume_name = "Disk"
 
-                    label = volume_name + " (" + drive + ")"
+                    label = f"{volume_name} ({drive})"
                     result[path] = {
                         "label": label,
                         "size": None,
@@ -597,7 +589,7 @@ def get_windows_volume_name(path):
     max_component_length = None
     file_system_flags = None
 
-    result = kernel32.GetVolumeInformationW(
+    if result := kernel32.GetVolumeInformationW(
         ctypes.c_wchar_p(path),
         volume_name_buffer,
         ctypes.sizeof(volume_name_buffer),
@@ -606,9 +598,7 @@ def get_windows_volume_name(path):
         file_system_flags,
         file_system_name_buffer,
         ctypes.sizeof(file_system_name_buffer),
-    )
-
-    if result:
+    ):
         return volume_name_buffer.value
     else:
         return None
@@ -634,7 +624,7 @@ def get_windows_network_locations():
             try:
                 target = get_windows_lnk_target(lnk_path)
                 result[target] = {
-                    "label": entry.name + " (" + target + ")",
+                    "label": f"{entry.name} ({target})",
                     "size": None,
                     "modified": None,
                 }
@@ -705,24 +695,20 @@ def universal_dirname(path: str) -> str:
 
     path = path.rstrip(sep)
     result = path[: path.rindex(sep)]
-    if not result:
-        return sep
-    else:
-        return result
+    return result if result else sep
 
 
 def universal_relpath(path: str, context: str) -> str:
     """Tries to give relative path"""
-    if "/" in path:
-        import pathlib
-
-        p = pathlib.PurePosixPath(path)
-        try:
-            return str(p.relative_to(context))
-        except ValueError:
-            return path
-    else:
+    if "/" not in path:
         return os.path.relpath(path, context)
+    import pathlib
+
+    p = pathlib.PurePosixPath(path)
+    try:
+        return str(p.relative_to(context))
+    except ValueError:
+        return path
 
 
 def get_python_version_string():
@@ -778,11 +764,8 @@ def read_one_incoming_message_str(line_reader):
         return msg_str
 
     line_count = int(msg_str[1:].split(maxsplit=1)[0])
-    read_lines = 1
-    while read_lines < line_count:
+    for _ in range(1, line_count):
         msg_str += line_reader()
-        read_lines += 1
-
     return msg_str
 
 

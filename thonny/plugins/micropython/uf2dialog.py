@@ -37,8 +37,7 @@ class Uf2FlashingDialog(BaseFlashingDialog):
         result = {}
         for path in paths:
             try:
-                target_info = self.create_target_info(path)
-                if target_info:
+                if target_info := self.create_target_info(path):
                     result[target_info.title] = target_info
             except Exception:
                 # the disk may have been ejected during read or smth like this
@@ -51,11 +50,10 @@ class Uf2FlashingDialog(BaseFlashingDialog):
             if target.model == "Raspberry Pi RP2":
                 # too general to be called model
                 return "RP2", "family"
-            else:
-                text = target.model
-                if target.family:
-                    text += f"   ({family_code_to_name(target.family)})"
-                return text, "model"
+            text = target.model
+            if target.family:
+                text += f"   ({family_code_to_name(target.family)})"
+            return text, "model"
         elif target.board_id:
             text = target.board_id
             if target.family:
@@ -79,10 +77,12 @@ class Uf2FlashingDialog(BaseFlashingDialog):
 
         # Compare set of words both with and without considering the possibility that one of them
         # may have vendor name added and other not.
-        return _extract_normalized_words(target.model) == _extract_normalized_words(
+        return _extract_normalized_words(
+            target.model
+        ) == _extract_normalized_words(
             variant["model"]
         ) or _extract_normalized_words(
-            target.model + " " + variant["vendor"]
+            f"{target.model} " + variant["vendor"]
         ) == _extract_normalized_words(
             variant["model"] + " " + variant["vendor"]
         )
@@ -101,13 +101,21 @@ class Uf2FlashingDialog(BaseFlashingDialog):
         if "boardid:rpirp2" in normalized_content:
             family = "rp2"
         else:
-            for keyword in ["samd21", "samd51", "nrf51", "nrf52", "esp32s3", "esp32s3"]:
-                if keyword in normalized_content:
-                    family = keyword
-                    break
-            else:
-                family = None
-
+            family = next(
+                (
+                    keyword
+                    for keyword in [
+                        "samd21",
+                        "samd51",
+                        "nrf51",
+                        "nrf52",
+                        "esp32s3",
+                        "esp32s3",
+                    ]
+                    if keyword in normalized_content
+                ),
+                None,
+            )
         return TargetInfo(
             title=create_volume_description(path),
             path=path,
@@ -190,7 +198,7 @@ class Uf2FlashingDialog(BaseFlashingDialog):
                             logger.exception("Could not fsync")
                     percent_copied = bytes_copied / size * 100
                     percent_str = "%.0f%%" % (percent_copied)
-                    self.set_action_text("Copying... " + percent_str)
+                    self.set_action_text(f"Copying... {percent_str}")
                     # use the right half of the progress bar for copying
                     self.report_progress(percent_copied + 100, 200)
                     self.replace_last_line(percent_str)
@@ -208,8 +216,7 @@ class Uf2FlashingDialog(BaseFlashingDialog):
         step = 0.2
         while wait_time < 10:
             new_ports = list_serial_ports_with_hw_info()
-            added_ports = set(new_ports) - set(old_ports)
-            if added_ports:
+            if added_ports := set(new_ports) - set(old_ports):
                 for p in added_ports:
                     self.append_text("Found port %s\n" % p)
                     self.set_action_text("Found port")
@@ -230,12 +237,11 @@ class Uf2FlashingDialog(BaseFlashingDialog):
 
 
 def find_uf2_property(lines: List[str], prop_name: str) -> Optional[str]:
-    marker = prop_name + ": "
-    for line in lines:
-        if line.startswith(marker):
-            return line[len(marker) :]
-
-    return None
+    marker = f"{prop_name}: "
+    return next(
+        (line[len(marker) :] for line in lines if line.startswith(marker)),
+        None,
+    )
 
 
 def show_uf2_installer(master, firmware_name: str) -> None:
@@ -259,15 +265,14 @@ def _extract_normalized_words(text: str) -> Set[str]:
 
 
 def create_volume_description(path: str) -> str:
-    if sys.platform == "win32":
-        try:
-            label = get_win_volume_name(path)
-            disk = path.strip("\\")
-            return f"{label} ({disk})"
-        except Exception:
-            logger.error("Could not query volume name for %r", path)
-            return path
-    else:
+    if sys.platform != "win32":
+        return path
+    try:
+        label = get_win_volume_name(path)
+        disk = path.strip("\\")
+        return f"{label} ({disk})"
+    except Exception:
+        logger.error("Could not query volume name for %r", path)
         return path
 
 
