@@ -135,7 +135,7 @@ class BaseFileBrowser(ttk.Frame):
 
         def get_dir_range(event):
             mouse_index = self.path_bar.index("@%d,%d" % (event.x, event.y))
-            return self.path_bar.tag_prevrange("dir", mouse_index + "+1c")
+            return self.path_bar.tag_prevrange("dir", f"{mouse_index}+1c")
 
         def dir_tag_motion(event):
             self.path_bar.tag_remove("underline", "1.0", "end")
@@ -228,8 +228,7 @@ class BaseFileBrowser(ttk.Frame):
         self.current_focus = path
 
     def scroll_to_top(self):
-        children = self.tree.get_children()
-        if children:
+        if children := self.tree.get_children():
             self.tree.see(children[0])
 
     def split_path(self, path):
@@ -244,8 +243,7 @@ class BaseFileBrowser(ttk.Frame):
             # can happen in Windows when pressing ENTER on file
             return "break"
 
-        path = self.tree.set(node_id, "path")
-        if path:  # and path not in self._cached_child_data:
+        if path := self.tree.set(node_id, "path"):
             self.render_children_from_cache(node_id)
             # self.request_dirs_child_data(node_id, [path])
         # else:
@@ -307,22 +305,16 @@ class BaseFileBrowser(ttk.Frame):
     def get_extension_from_name(self, name):
         if name is None:
             return None
-        if "." in name:
-            return "." + name.split(".")[-1].lower()
-        else:
-            return name.lower()
+        return "." + name.split(".")[-1].lower() if "." in name else name.lower()
 
     def get_selected_value(self, key):
-        node_id = self.get_selected_node()
-
-        if node_id:
+        if node_id := self.get_selected_node():
             return self.tree.set(node_id, key)
         else:
             return None
 
     def get_active_directory(self):
-        path = self.tree.set(ROOT_NODE_ID, "path")
-        return path
+        return self.tree.set(ROOT_NODE_ID, "path")
 
     def request_dirs_child_data(self, node_id, paths):
         raise NotImplementedError()
@@ -378,7 +370,7 @@ class BaseFileBrowser(ttk.Frame):
         for parent_path in self._cached_child_data:
             # hard to split because it may not be in this system format
             name = path[len(parent_path) :]
-            if name[0:1] in ["/", "\\"]:
+            if name[:1] in ["/", "\\"]:
                 name = name[1:]
 
             if name in self._cached_child_data[parent_path]:
@@ -442,7 +434,7 @@ class BaseFileBrowser(ttk.Frame):
 
             # if browser is focused into this path
             if node_id == "":
-                self.show_error("Directory " + path + " does not exist anymore", node_id)
+                self.show_error(f"Directory {path} does not exist anymore", node_id)
             elif children_data == "missing":
                 self.tree.delete(node_id)
             else:
@@ -451,7 +443,7 @@ class BaseFileBrowser(ttk.Frame):
                 self.tree.item(node_id, open=False)
 
         elif children_data is None:
-            raise RuntimeError("None data for %s" % path)
+            raise RuntimeError(f"None data for {path}")
         else:
             fs_children_names = children_data.keys()
             tree_children_ids = self.tree.get_children(node_id)
@@ -477,12 +469,7 @@ class BaseFileBrowser(ttk.Frame):
             def file_order(name):
                 # items in a folder should be ordered so that
                 # folders come first and names are ordered case insensitively
-                return (
-                    not children_data[name]["isdir"],  # prefer directories
-                    not ":" in name,  # prefer drives
-                    name.upper(),
-                    name,
-                )
+                return not children_data[name]["isdir"], ":" not in name, name.upper(), name
 
             # update tree
             ids_sorted_by_name = list(
@@ -564,11 +551,7 @@ class BaseFileBrowser(ttk.Frame):
 
     def join(self, parent, child):
         if parent == "":
-            if self.get_dir_separator() == "/":
-                return "/" + child
-            else:
-                return child
-
+            return f"/{child}" if self.get_dir_separator() == "/" else child
         if parent.endswith(self.get_dir_separator()):
             return parent + child
         else:
@@ -599,9 +582,7 @@ class BaseFileBrowser(ttk.Frame):
         pass
 
     def on_secondary_click(self, event):
-        node_id = self.tree.identify_row(event.y)
-
-        if node_id:
+        if node_id := self.tree.identify_row(event.y):
             if node_id not in self.tree.selection():
                 # replace current selection
                 self.tree.selection_set(node_id)
@@ -769,10 +750,9 @@ class BaseFileBrowser(ttk.Frame):
                 + (
                     bytes_str
                     if size_fmt_str.endswith(" B")
-                    else size_fmt_str + "  (" + bytes_str + ")"
+                    else f"{size_fmt_str}  ({bytes_str})"
                 )
-                + "\n\n"
-            )
+            ) + "\n\n"
 
         if values["modified"].strip():
             text += tr("Modified") + ":\n    " + values["modified"] + "\n\n"
@@ -789,9 +769,7 @@ class BaseFileBrowser(ttk.Frame):
             self.path_to_highlight = None
 
     def create_new_file(self):
-        selected_node_id = self.get_selected_node()
-
-        if selected_node_id:
+        if selected_node_id := self.get_selected_node():
             selected_path = self.tree.set(selected_node_id, "path")
             selected_kind = self.tree.set(selected_node_id, "kind")
 
@@ -813,7 +791,7 @@ class BaseFileBrowser(ttk.Frame):
         path = self.join(parent_path, name)
 
         if self.path_exists(path):
-            messagebox.showerror("Error", "The file '" + path + "' already exists", master=self)
+            messagebox.showerror("Error", f"The file '{path}' already exists", master=self)
             return self.create_new_file()
         else:
             self.create_new_file_editor(path)
@@ -828,7 +806,7 @@ class BaseFileBrowser(ttk.Frame):
         if not selection:
             return
 
-        confirmation = "Are you sure want to delete %s?" % selection["description"]
+        confirmation = f'Are you sure want to delete {selection["description"]}?'
         confirmation += "\n\nNB! Trash bin won't be used (no way to undelete)!"
         if "dir" in selection["kinds"]:
             confirmation += "\n" + "Directories will be deleted with content."
@@ -866,10 +844,9 @@ class BaseFileBrowser(ttk.Frame):
         parent = self.get_selected_path()
         if parent is None:
             parent = self.current_focus
-        else:
-            if self.get_selected_kind() == "file":
-                # dirname does the right thing even if parent is Linux path and running on Windows
-                parent = os.path.dirname(parent)
+        elif self.get_selected_kind() == "file":
+            # dirname does the right thing even if parent is Linux path and running on Windows
+            parent = os.path.dirname(parent)
 
         name = ask_string(
             tr("New directory"),
@@ -921,10 +898,12 @@ class BaseFileBrowser(ttk.Frame):
             return
         file_name = os.path.basename(old_name)
 
-        new_name = simpledialog.askstring(
-            tr("Rename '%s'") % file_name, tr("Enter new name"), initialvalue=file_name, parent=self
-        )
-        if new_name:
+        if new_name := simpledialog.askstring(
+            tr("Rename '%s'") % file_name,
+            tr("Enter new name"),
+            initialvalue=file_name,
+            parent=self,
+        ):
             self.perform_rename(old_name, new_name)
             self.refresh_tree()
 
@@ -961,8 +940,7 @@ class CopyPaste(object):
         self.paths = []
 
     def get_selection_paths(self):
-        selection = self.fb.get_selection_info(True)
-        if selection:
+        if selection := self.fb.get_selection_info(True):
             return selection["paths"]
         return []
 
@@ -982,8 +960,7 @@ class CopyPaste(object):
             return True
 
         for p in self.paths:
-            p_isdir = os.path.isdir(p)
-            if p_isdir:
+            if p_isdir := os.path.isdir(p):
                 if target.startswith(p + os.sep):
                     return True
                 if p.startswith(target):
@@ -993,8 +970,7 @@ class CopyPaste(object):
         return False
 
     def conflicts(self, target):
-        conf = self._conflicts(target)
-        return conf
+        return self._conflicts(target)
 
     def cut(self):
         self.paths = self.get_selection_paths()
@@ -1055,18 +1031,17 @@ class BaseLocalFileBrowser(BaseFileBrowser):
 
     def split_path(self, path):
         parts = super().split_path(path)
-        if running_on_windows() and path.startswith("\\\\"):
-            # Don't split a network name!
-            sep = self.get_dir_separator()
-            for i in reversed(range(len(parts))):
-                prefix = sep.join(parts[: i + 1])
-                if os.path.ismount(prefix):
-                    return [prefix] + parts[i + 1 :]
-
-            # Could not find the prefix corresponding to mount
-            return [path]
-        else:
+        if not running_on_windows() or not path.startswith("\\\\"):
             return parts
+        # Don't split a network name!
+        sep = self.get_dir_separator()
+        for i in reversed(range(len(parts))):
+            prefix = sep.join(parts[: i + 1])
+            if os.path.ismount(prefix):
+                return [prefix] + parts[i + 1 :]
+
+        # Could not find the prefix corresponding to mount
+        return [path]
 
     def open_file(self, path):
         get_workbench().get_editor_notebook().show_file(path)
@@ -1132,7 +1107,7 @@ class BaseLocalFileBrowser(BaseFileBrowser):
     def perform_rename(self, old_name, new_name):
         basepath = os.path.dirname(old_name)
         full_path = os.path.join(basepath, new_name)
-        logger.debug("rename %s to %s" % (old_name, full_path))
+        logger.debug(f"rename {old_name} to {full_path}")
 
         if old_name == full_path:
             return
@@ -1159,11 +1134,7 @@ class BaseRemoteFileBrowser(BaseFileBrowser):
         get_workbench().unbind("RemoteFileOperation", self.on_remote_file_operation)
 
     def get_root_text(self):
-        runner = get_runner()
-        if runner:
-            return runner.get_node_label()
-
-        return "Back-end"
+        return runner.get_node_label() if (runner := get_runner()) else "Back-end"
 
     def create_new_file_editor(self, path):
         get_workbench().get_editor_notebook().open_new_file(path, remote=True)
@@ -1223,9 +1194,7 @@ class BaseRemoteFileBrowser(BaseFileBrowser):
         if not runner:
             return False
         proxy = runner.get_backend_proxy()
-        if not proxy:
-            return False
-        return proxy.supports_remote_directories()
+        return proxy.supports_remote_directories() if proxy else False
 
     def on_remote_file_operation(self, event):
         path = event["path"]
@@ -1429,7 +1398,7 @@ class BackendFileDialog(CommonDialog):
         if parent_path == "" or parent_path.endswith("/"):
             self.result = parent_path + name
         else:
-            self.result = parent_path + "/" + name
+            self.result = f"{parent_path}/{name}"
 
         self.destroy()
 
@@ -1442,8 +1411,7 @@ class BackendFileDialog(CommonDialog):
             return
 
         if self.browser.get_selected_kind() == "file":
-            name = self.browser.get_selected_name()
-            if name:
+            if name := self.browser.get_selected_name():
                 self.name_var.set(name)
 
     def on_name_edit(self, event=None):
@@ -1553,16 +1521,18 @@ def ask_backend_path(master, dialog_kind):
 
 
 def choose_node_for_file_operations(master, prompt):
-    if get_runner().supports_remote_files():
-        dlg = NodeChoiceDialog(master, prompt)
-        show_dialog(dlg, master)
-        if dlg.result == "remote" and not get_runner().ready_for_remote_file_operations(
-            show_message=True
-        ):
-            return None
-        return dlg.result
-    else:
+    if not get_runner().supports_remote_files():
         return "local"
+    dlg = NodeChoiceDialog(master, prompt)
+    show_dialog(dlg, master)
+    return (
+        None
+        if dlg.result == "remote"
+        and not get_runner().ready_for_remote_file_operations(
+            show_message=True
+        )
+        else dlg.result
+    )
 
 
 def get_local_files_root_text():
@@ -1576,7 +1546,7 @@ def get_local_files_root_text():
 
 
 def get_file_handler_conf_key(extension):
-    return "file_default_handlers.%s" % extension
+    return f"file_default_handlers.{extension}"
 
 
 def show_hidden_files():

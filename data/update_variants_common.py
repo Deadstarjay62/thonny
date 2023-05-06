@@ -51,9 +51,11 @@ def find_download_links(
     for link in parser.links:
         link = url_prefix + link
         if len(stables) < max_stable_count and re.search(stable_pattern, link):
-            stables.append({"version": re.search(stable_pattern, link).group(1), "url": link})
+            stables.append({"version": re.search(stable_pattern, link)[1], "url": link})
         elif len(unstables) < max_unstable_count and re.search(unstable_pattern, link):
-            unstables.append({"version": re.search(unstable_pattern, link).group(1), "url": link})
+            unstables.append(
+                {"version": re.search(unstable_pattern, link)[1], "url": link}
+            )
 
     result = stables + unstables
     for item in result:
@@ -67,18 +69,14 @@ def find_download_links(
 
 def add_download_link_if_exists(links: List[Dict[str, str]], link: str, version: str) -> None:
     response = requests.head(link)
-    if response.status_code in [200, 302]:
+    if response.status_code in {200, 302}:
         links.append({"version": version, "url": link})
     else:
         print(f"Could not download {link}, status: {response.status_code}")
 
 
 def get_attr_value(attrs, name):
-    for key, value in attrs:
-        if key == name:
-            return value
-
-    return None
+    return next((value for key, value in attrs if key == name), None)
 
 
 class FileLinksParser(HTMLParser):
@@ -136,7 +134,7 @@ def save_variants(
     processed_variants = []
     for variant in relevant_variants:
         title = variant.get("title", variant["model"])
-        if (title.lower() + " ").startswith(variant["vendor"].lower()):
+        if f"{title.lower()} ".startswith(variant["vendor"].lower()):
             variant["title"] = title[len(variant["vendor"]) :].strip()
         title = variant.get("title", variant["model"])
 
@@ -167,9 +165,11 @@ def save_variants(
         variant = variant.copy()
         relevant_downloads = []
         for extension in extensions:
-            for download in variant["downloads"]:
-                if download["url"].endswith(extension):
-                    relevant_downloads.append(download)
+            relevant_downloads.extend(
+                download
+                for download in variant["downloads"]
+                if download["url"].endswith(extension)
+            )
         if not relevant_downloads:
             print(f"No downloads relevant for {extension}:", variant)
             continue

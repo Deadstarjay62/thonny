@@ -61,9 +61,8 @@ def get_user_site_packages_dir_for_base(userbase: str) -> str:
     if os.name == "nt":
         if sys.version_info < (3, 10):
             return f"{userbase}\\Python{version[0]}{version[1]}\\site-packages"
-        else:
-            ver_nodot = sys.winver.replace(".", "")
-            return f"{userbase}\\Python{ver_nodot}\\site-packages"
+        ver_nodot = sys.winver.replace(".", "")
+        return f"{userbase}\\Python{ver_nodot}\\site-packages"
 
     if sys.platform == "darwin" and sys._framework:
         return f"{userbase}/lib/python/site-packages"
@@ -88,7 +87,7 @@ def list_volumes(skip_letters=set()) -> Sequence[str]:
             for disk in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
                 if disk in skip_letters:
                     continue
-                path = "{}:\\".format(disk)
+                path = f"{disk}:\\"
                 if os.path.exists(path):
                     volumes.append(path)
 
@@ -124,24 +123,23 @@ def get_win_volume_name(path: str) -> str:
     the given disk/device.
     Code from http://stackoverflow.com/a/12056414
     """
-    if sys.platform == "win32":
-        import ctypes
-
-        vol_name_buf = ctypes.create_unicode_buffer(1024)
-        ctypes.windll.kernel32.GetVolumeInformationW(  # @UndefinedVariable
-            ctypes.c_wchar_p(path),
-            vol_name_buf,
-            ctypes.sizeof(vol_name_buf),
-            None,
-            None,
-            None,
-            None,
-            0,
-        )
-        assert isinstance(vol_name_buf.value, str)
-        return vol_name_buf.value
-    else:
+    if sys.platform != "win32":
         raise RuntimeError("Only meant for Windows")
+    import ctypes
+
+    vol_name_buf = ctypes.create_unicode_buffer(1024)
+    ctypes.windll.kernel32.GetVolumeInformationW(  # @UndefinedVariable
+        ctypes.c_wchar_p(path),
+        vol_name_buf,
+        ctypes.sizeof(vol_name_buf),
+        None,
+        None,
+        None,
+        None,
+        0,
+    )
+    assert isinstance(vol_name_buf.value, str)
+    return vol_name_buf.value
 
 
 def find_volumes_by_name(volume_name: str, skip_letters={"A"}) -> Sequence[str]:
@@ -174,28 +172,26 @@ def find_volume_by_name(
     volumes = find_volumes_by_name(volume_name)
     if len(volumes) == 1:
         return volumes[0]
-    else:
-        if len(volumes) == 0:
-            msg = not_found_msg % volume_name
-        else:
-            msg = found_several_msg % volume_name
+    msg = (
+        not_found_msg % volume_name
+        if len(volumes) == 0
+        else found_several_msg % volume_name
+    )
+    import tkinter as tk
+    from tkinter.messagebox import askyesno
 
-        import tkinter as tk
-        from tkinter.messagebox import askyesno
+    from thonny.ui_utils import askdirectory
 
-        from thonny.ui_utils import askdirectory
-
-        if askyesno(tr("Can't find suitable disk"), msg, master=parent):
-            path = askdirectory(parent=parent)
-            if path:
-                return path
+    if askyesno(tr("Can't find suitable disk"), msg, master=parent):
+        if path := askdirectory(parent=parent):
+            return path
 
     return None
 
 
 def shorten_repr(original_repr: str, max_len: int = 1000) -> str:
     if len(original_repr) > max_len:
-        return original_repr[: max_len - 1] + "…"
+        return f"{original_repr[:max_len - 1]}…"
     else:
         return original_repr
 
@@ -246,7 +242,7 @@ def _win_get_used_memory():
         ret = GetProcessMemoryInfo(process, ctypes.byref(counters), ctypes.sizeof(counters))
         if not ret:
             raise ctypes.WinError()
-        info = dict((name, getattr(counters, name)) for name, _ in counters._fields_)
+        info = {name: getattr(counters, name) for name, _ in counters._fields_}
         return info
 
     return get_memory_info()["PrivateUsage"]
@@ -259,10 +255,7 @@ def _unix_get_used_memory():
 
 def construct_cmd_line(parts, safe_tokens=[]) -> str:
     def quote(s):
-        if s in safe_tokens:
-            return s
-        else:
-            return shlex.quote(s)
+        return s if s in safe_tokens else shlex.quote(s)
 
     return " ".join(map(quote, parts))
 
@@ -273,13 +266,11 @@ def user_friendly_python_command_line(cmd):
 
     lines = [""]
     for item in cmd:
-        if lines[-1] and len(lines[-1] + " " + item) > 60:
+        if lines[-1] and len(f"{lines[-1]} {item}") > 60:
             lines.append("")
-        lines[-1] = (lines[-1] + " " + item).strip()
+        lines[-1] = f"{lines[-1]} {item}".strip()
 
     return "\n".join(lines)
-
-    return subprocess.list2cmdline(cmd)
 
 
 def parse_cmd_line(s):
@@ -363,9 +354,10 @@ def levenshtein_damerau_distance(s1, s2, maxDistance):
         #  consider if we have passed the max distance if all paths through
         #  the transposition row are larger than the max we can stop calculating
         #  distance and return the last element in that row and return the max
-        if transpositionRow:
-            if not any(cellValue < maxDistance for cellValue in transpositionRow):
-                return maxDistance
+        if transpositionRow and all(
+            cellValue >= maxDistance for cellValue in transpositionRow
+        ):
+            return maxDistance
 
         for colNum in range(1, l1 + 1):
             insertionCost = curRow[colNum - 1] + 1
@@ -377,10 +369,12 @@ def levenshtein_damerau_distance(s1, s2, maxDistance):
 
             #  test for a possible transposition optimization
             #  check to see if we have at least 2 characters
-            if 1 < rowNum <= colNum:
-                #  test for possible transposition
-                if s1[colNum - 1] == s2[colNum - 2] and s2[colNum - 1] == s1[colNum - 2]:
-                    curRow[colNum] = min(curRow[colNum], transpositionRow[colNum - 2] + 1)
+            if (
+                1 < rowNum <= colNum
+                and s1[colNum - 1] == s2[colNum - 2]
+                and s2[colNum - 1] == s1[colNum - 2]
+            ):
+                curRow[colNum] = min(curRow[colNum], transpositionRow[colNum - 2] + 1)
 
     #  the last cell of the matrix is ALWAYS the shortest distance between the two strings
     return curRow[-1]
@@ -394,14 +388,13 @@ def get_file_creation_date(path_to_file):
     """
     if sys.platform == "win32":
         return os.path.getctime(path_to_file)
-    else:
-        stat = os.stat(path_to_file)
-        try:
-            return stat.st_birthtime
-        except AttributeError:
-            # We're probably on Linux. No easy way to get creation dates here,
-            # so we'll settle for when its content was last modified.
-            return stat.st_mtime
+    stat = os.stat(path_to_file)
+    try:
+        return stat.st_birthtime
+    except AttributeError:
+        # We're probably on Linux. No easy way to get creation dates here,
+        # so we'll settle for when its content was last modified.
+        return stat.st_mtime
 
 
 _timer_time = 0
@@ -432,11 +425,7 @@ def copy_to_clipboard(data):
     encoding = "utf-8"
     env["PYTHONIOENCODING"] = encoding
 
-    if sys.version_info >= (3, 6):
-        extra = {"encoding": encoding}
-    else:
-        extra = {}
-
+    extra = {"encoding": encoding} if sys.version_info >= (3, 6) else {}
     proc = subprocess.Popen(
         command,
         stdin=subprocess.PIPE,

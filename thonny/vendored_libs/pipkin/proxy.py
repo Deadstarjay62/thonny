@@ -126,9 +126,7 @@ class SimpleIndexDownloader(BaseIndexDownloader):
 
     def get_dist_file_names(self, dist_name: str) -> Optional[List[str]]:
         urls = self._get_dist_urls(dist_name)
-        if urls is None:
-            return None
-        return list(urls.keys())
+        return None if urls is None else list(urls.keys())
 
     def _get_dist_urls(self, dist_name: str) -> Optional[Dict[str, str]]:
         """
@@ -157,9 +155,8 @@ class SimpleIndexDownloader(BaseIndexDownloader):
     def get_file_content(self, dist_name: str, file_name: str) -> bytes:
         if self._should_return_dummy(dist_name):
             return create_dummy_dist(dist_name, file_name)
-        else:
-            original_bytes = self._download_file(dist_name, file_name)
-            return self._tweak_file(dist_name, file_name, original_bytes)
+        original_bytes = self._download_file(dist_name, file_name)
+        return self._tweak_file(dist_name, file_name, original_bytes)
 
     def _download_file(self, dist_name: str, file_name: str) -> bytes:
         urls = self._get_dist_urls(dist_name)
@@ -230,17 +227,12 @@ class SimpleIndexDownloader(BaseIndexDownloader):
                     # toplevel module
                     module_name = rel_name[: -len(".py")]
                     py_modules.append(module_name)
-                else:
-                    if info.isdir():
-                        # Assuming all toplevel directories represent packages.
-                        packages.append(rel_name)
-            else:
-                # Assuming an item inside a subdirectory.
-                # If it's a py, it will be included together with containing package,
-                # otherwise it will be picked up by package_data wildcard expression.
-                if rel_segments[0] not in packages:
-                    # directories may not have their own entry
-                    packages.append(rel_segments[0])
+                elif info.isdir():
+                    # Assuming all toplevel directories represent packages.
+                    packages.append(rel_name)
+            elif rel_segments[0] not in packages:
+                # directories may not have their own entry
+                packages.append(rel_segments[0])
 
             # all existing files and dirs need to be added without changing
             out_tar.addfile(out_info, io.BytesIO(content))
@@ -257,10 +249,12 @@ class SimpleIndexDownloader(BaseIndexDownloader):
         setup_py = self._create_setup_py(metadata, py_modules, packages, requirements)
         logger.debug("setup.py: %s", setup_py)
 
-        self._add_file_to_tar(wrapper_dir + "/setup.py", setup_py.encode("utf-8"), out_tar)
-        self._add_file_to_tar(wrapper_dir + "/PKG-INFO", metadata_bytes, out_tar)
         self._add_file_to_tar(
-            wrapper_dir + "/setup.cfg",
+            f"{wrapper_dir}/setup.py", setup_py.encode("utf-8"), out_tar
+        )
+        self._add_file_to_tar(f"{wrapper_dir}/PKG-INFO", metadata_bytes, out_tar)
+        self._add_file_to_tar(
+            f"{wrapper_dir}/setup.cfg",
             b"""[egg_info]
 tag_build = 
 tag_date = 0
@@ -268,10 +262,10 @@ tag_date = 0
             out_tar,
         )
         self._add_file_to_tar(
-            wrapper_dir + "/" + egg_info_path + "/dependency_links.txt", b"\n", out_tar
+            f"{wrapper_dir}/{egg_info_path}/dependency_links.txt", b"\n", out_tar
         )
         self._add_file_to_tar(
-            wrapper_dir + "/" + egg_info_path + "/top_level.txt",
+            f"{wrapper_dir}/{egg_info_path}/top_level.txt",
             ("\n".join(packages + py_modules) + "\n").encode("utf-8"),
             out_tar,
         )
@@ -280,12 +274,7 @@ tag_date = 0
 
         out_tar.close()
 
-        out_bytes = out_buffer.getvalue()
-
-        # with open("_temp.tar.gz", "wb") as fp:
-        #    fp.write(out_bytes)
-
-        return out_bytes
+        return out_buffer.getvalue()
 
     def _add_file_to_tar(self, name: str, content: bytes, tar: tarfile.TarFile) -> None:
         stream = io.BytesIO(content)
@@ -376,7 +365,7 @@ class MpOrgV2IndexDownloader(BaseIndexDownloader):
 
         result = []
         for version in meta["versions"]["py"]:
-            file_name = create_dist_info_version_name(dist_name, version) + "-py3-none-any.whl"
+            file_name = f"{create_dist_info_version_name(dist_name, version)}-py3-none-any.whl"
             meta["original_versions_per_file_name"][file_name] = version
             result.append(file_name)
 
@@ -400,13 +389,10 @@ class MpOrgV2IndexDownloader(BaseIndexDownloader):
     def _construct_wheel_content(
         self, dist_meta: Dict[str, Any], version_meta: Dict[str, Any]
     ) -> bytes:
-        urls_per_wheel_path = {}
-
-        for wheel_path, short_hash in version_meta.get("hashes", []):
-            urls_per_wheel_path[
-                wheel_path
-            ] = f"{self._index_url}/file/{short_hash[:2]}/{short_hash}"
-
+        urls_per_wheel_path = {
+            wheel_path: f"{self._index_url}/file/{short_hash[:2]}/{short_hash}"
+            for wheel_path, short_hash in version_meta.get("hashes", [])
+        }
         for wheel_path, url in version_meta.get("urls", []):
             urls_per_wheel_path[wheel_path] = url
 
@@ -479,14 +465,18 @@ class MpOrgV2IndexDownloader(BaseIndexDownloader):
 
     def _get_dist_metadata(self, dist_name: str) -> Optional[Dict[Any, Any]]:
         if self._packages is None:
-            with urlopen(MP_ORG_INDEX_V2 + "/index.json") as fp:
+            with urlopen(f"{MP_ORG_INDEX_V2}/index.json") as fp:
                 self._packages = json.load(fp)["packages"]
 
-        for package in self._packages:
-            if custom_normalize_dist_name(package["name"]) == custom_normalize_dist_name(dist_name):
-                return package
-
-        return None
+        return next(
+            (
+                package
+                for package in self._packages
+                if custom_normalize_dist_name(package["name"])
+                == custom_normalize_dist_name(dist_name)
+            ),
+            None,
+        )
 
 
 class PipkinProxy(HTTPServer):
@@ -498,8 +488,9 @@ class PipkinProxy(HTTPServer):
         if not no_mp_org:
             self._downloaders.append(MpOrgV2IndexDownloader(MP_ORG_INDEX_V2))
         self._downloaders.append(SimpleIndexDownloader(index_url or PYPI_SIMPLE_INDEX))
-        for url in extra_index_urls:
-            self._downloaders.append(SimpleIndexDownloader(url))
+        self._downloaders.extend(
+            SimpleIndexDownloader(url) for url in extra_index_urls
+        )
         super().__init__(("127.0.0.1", port), PipkinProxyHandler)
 
     def get_downloader_for_dist(self, dist_name: str) -> Optional[BaseIndexDownloader]:
@@ -634,7 +625,7 @@ def create_dummy_dist(dist_name: str, file_name: str) -> bytes:
         elif suffix == ".tar.gz":
             setup_py_args = ["sdist", "--formats=gztar"]
         else:
-            raise AssertionError("Unexpected suffix " + suffix)
+            raise AssertionError(f"Unexpected suffix {suffix}")
 
         args = [sys.executable, setup_py_path] + setup_py_args
         subprocess.check_call(args, executable=args[0], cwd=tmp, stdin=subprocess.DEVNULL)
